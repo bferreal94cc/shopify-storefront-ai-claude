@@ -48,4 +48,3 @@ export async function loader({request, context, params}) {
 }
 
 /** @typedef {import('./+types/discount.$code').Route} Route */
-/** @typedef {ReturnType<typeof useLoaderData<typeof loader>>} LoaderReturnData */

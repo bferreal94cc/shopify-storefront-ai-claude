@@ -151,7 +151,6 @@ const BLOGS_QUERY = `#graphql
         pageInfo {
           hasPreviousPage
           hasNextPage
-          hasNextPage
           endCursor
           startCursor
         }
