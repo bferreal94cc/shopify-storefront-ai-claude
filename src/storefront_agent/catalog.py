@@ -17,6 +17,8 @@ the same product is priced differently in each storefront on purpose.
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field
 
 from .domain import (
@@ -113,6 +115,18 @@ class CopyWriter:
 # -- pricing ---------------------------------------------------------------
 
 
+def _ceil_cents(required: float) -> int:
+    """Smallest whole cent at or above ``required``, tolerating float dust.
+
+    The margin solve is a float division, so a requirement that is exactly
+    1099 cents can arrive as 1098.9999999999 or 1099.0000000001. A bare
+    ``math.ceil`` turns the second into 1100 -- a cent of drift that charm
+    rounding then amplifies into a whole dollar (10.99 becomes 11.99). The
+    epsilon absorbs the dust without ever rounding a genuine fraction down.
+    """
+    return math.ceil(required - 1e-9)
+
+
 @dataclass
 class PricingEngine:
     """Solves for a sell price that hits a target margin net of channel fees.
@@ -141,7 +155,7 @@ class PricingEngine:
         if denominator <= 0:
             return None
         required = (storefront.fee_fixed + landed_cost).cents / denominator
-        price = Money(int(required) + 1, landed_cost.currency)
+        price = Money(_ceil_cents(required), landed_cost.currency)
         return self._charm(price) if self.charm_endings else price
 
     def net_proceeds(self, price: Money, storefront: Storefront) -> Money:

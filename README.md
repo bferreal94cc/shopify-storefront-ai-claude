@@ -12,7 +12,7 @@ pip install -e '.[dev]'
 storefront-agent --demo                      # offline end-to-end walkthrough
 storefront-agent "start selling desk lamps on shopify"
 storefront-agent --check-in                  # what needs you right now
-storefront-agent --host 127.0.0.1 --port 8000   # owner console
+storefront-agent serve --host 127.0.0.1 --port 8000   # owner console
 ```
 
 ## Safety posture

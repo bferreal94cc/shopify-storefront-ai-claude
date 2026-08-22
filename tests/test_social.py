@@ -120,6 +120,26 @@ class TestScheduling:
         agent.scheduler.schedule(posts, NOW + timedelta(days=3))
         assert PostScheduler().due(posts, NOW) == []
 
+    def test_unapproved_posts_are_left_unscheduled(self, agent):
+        posts = agent.campaign_for(make_listing(), (SocialPlatform.INSTAGRAM,), NOW)
+        assert all(p.scheduled_for is None for p in posts)
+
+    def test_a_backlog_approved_late_does_not_publish_as_a_burst(self, agent):
+        # Three posts drafted on day zero, all cleared together two days later.
+        # Scheduling them from the draft time would make every one due at once.
+        drafted = []
+        for _ in range(3):
+            drafted += agent.campaign_for(make_listing(), (SocialPlatform.INSTAGRAM,), NOW)
+        approved_at = NOW + timedelta(days=2)
+        for post in drafted:
+            agent.approve(post, at=approved_at)
+
+        times = sorted(p.scheduled_for for p in drafted)
+        assert all(t >= approved_at for t in times)
+        gaps = [(b - a).total_seconds() / 3600 for a, b in zip(times, times[1:])]
+        assert all(gap >= SocialPlatform.INSTAGRAM.min_gap_hours for gap in gaps)
+        assert len(PostScheduler().due(drafted, approved_at)) == 1
+
     def test_awaiting_approval_lists_what_the_owner_must_clear(self, agent):
         agent.campaign_for(make_listing(), (SocialPlatform.INSTAGRAM, SocialPlatform.X), NOW)
         assert len(agent.awaiting_approval()) == 2

@@ -8,7 +8,7 @@ import pytest
 
 from conftest import NOW, dollars, make_context, make_listing, make_order
 from storefront_agent.channels import InMemoryChannel
-from storefront_agent.domain import Channel, OrderState, POState, Shipment
+from storefront_agent.domain import Channel, OrderLine, OrderState, POState, Shipment
 from storefront_agent.fulfillment import FulfillmentEngine
 from storefront_agent.orders import OrderPipeline
 from storefront_agent.policy import AutomationPolicy
@@ -62,6 +62,32 @@ class TestBatching:
         order = engine.context.order_by_id("o1")
         assert order.state is OrderState.HELD
         assert "no supplier" in order.hold_reason or order.hold_reason == ""
+
+    def test_an_unmappable_line_leaves_none_of_its_order_in_a_po(self, engine):
+        # The order is held, but the buyable line must not be bought anyway.
+        engine.context.listings.append(make_listing("SKU-X", supplier_id="", quantity=10))
+        order = make_order("o1", sku="SKU-A", quantity=1)
+        order.lines = (
+            OrderLine("SKU-A", 1, dollars(24.99), dollars(8)),
+            OrderLine("SKU-X", 1, dollars(24.99), dollars(8)),
+        )
+        engine.pipeline.intake([order])
+        pos = engine.draft_purchase_orders(at=NOW)
+        assert engine.context.order_by_id("o1").state is OrderState.HELD
+        assert [line for po in pos for line in po.lines if line.order_id == "o1"] == []
+
+    def test_an_order_spanning_two_suppliers_is_held_not_split(self, engine):
+        # An order carries one purchase_order_id, so splitting it would attach
+        # the first PO and orphan the rest.
+        order = make_order("o1", sku="SKU-A", quantity=1)
+        order.lines = (
+            OrderLine("SKU-A", 1, dollars(24.99), dollars(8)),
+            OrderLine("SKU-C", 1, dollars(24.99), dollars(8)),
+        )
+        engine.pipeline.intake([order])
+        pos = engine.draft_purchase_orders(at=NOW)
+        assert engine.context.order_by_id("o1").state is OrderState.HELD
+        assert [line for po in pos for line in po.lines if line.order_id == "o1"] == []
 
     def test_only_cleared_orders_are_batched(self, engine):
         cleared(engine, ("o1", "SKU-A", 1))

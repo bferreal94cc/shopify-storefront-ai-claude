@@ -473,7 +473,7 @@ class Orchestrator:
         if item.kind is ApprovalKind.SOCIAL_POST:
             post = next((p for p in self.social.posts if p.id == item.subject_id), None)
             if post is not None:
-                self.social.approve(post)
+                self.social.approve(post, at=moment)
             return AgentResult("social", "act_on", True, f"scheduled {item.subject_id}")
         return AgentResult("approvals", "act_on", True, f"{item_id} approved")
 

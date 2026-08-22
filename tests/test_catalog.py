@@ -40,6 +40,25 @@ class TestPricing:
         half = Storefront(Channel.AMAZON, "X", fee_rate=0.50, fee_fixed=Money(0))
         assert PricingEngine().price_for(dollars(8), half, 0.50) is None
 
+    def test_an_exact_cent_requirement_is_not_rounded_past(self):
+        # Zero fees and a zero margin make the requirement exactly the cost, so
+        # the cheapest clearing price IS the cost. Adding a cent unconditionally
+        # overshot it, and charm rounding turned that cent into a dollar.
+        free = Storefront(Channel.SHOPIFY, "Free", fee_rate=0.0, fee_fixed=Money(0))
+        assert PricingEngine(charm_endings=False).price_for(
+            dollars(10.99), free, 0.0
+        ).cents == 1099
+        assert PricingEngine(charm_endings=True).price_for(
+            dollars(10.99), free, 0.0
+        ).cents == 1099
+
+    def test_a_fractional_requirement_still_rounds_up(self):
+        free = Storefront(Channel.SHOPIFY, "Free", fee_rate=0.0, fee_fixed=Money(0))
+        # 1000 / 0.995 = 1005.02..., so the cheapest whole cent is 1006.
+        assert PricingEngine(charm_endings=False).price_for(
+            dollars(10), free, 0.005
+        ).cents == 1006
+
     def test_charm_rounding_always_rounds_up(self):
         assert PricingEngine._charm(Money(1050)).cents == 1099
         assert PricingEngine._charm(Money(1100)).cents == 1199

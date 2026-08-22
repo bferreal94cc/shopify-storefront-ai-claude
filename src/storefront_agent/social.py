@@ -148,6 +148,26 @@ class PostScheduler:
             last_on[post.platform] = when
         return posts
 
+    def next_slot(
+        self, posts: list[SocialPost], post: SocialPost, now: datetime
+    ) -> datetime:
+        """Earliest time ``post`` may go out without crowding its platform.
+
+        Unlike :meth:`schedule`, which spaces a batch against itself, this
+        looks at what is already on the books for that platform -- which is
+        what a post approved long after drafting has to fit around.
+        """
+        gap = timedelta(hours=post.platform.min_gap_hours)
+        taken = [
+            p.scheduled_for
+            for p in posts
+            if p is not post
+            and p.platform is post.platform
+            and p.scheduled_for is not None
+            and p.state in (PostState.SCHEDULED, PostState.PUBLISHED)
+        ]
+        return now if not taken else max(now, max(taken) + gap)
+
     def due(self, posts: list[SocialPost], now: datetime) -> list[SocialPost]:
         return [
             p
@@ -225,22 +245,36 @@ class SocialAgent:
         )
         return decision
 
-    def approve(self, post: SocialPost) -> SocialPost:
-        """Owner cleared it at check-in; it becomes schedulable."""
+    def approve(self, post: SocialPost, at: datetime | None = None) -> SocialPost:
+        """Owner cleared it at check-in; it becomes schedulable.
+
+        The slot is assigned *now*, not back when the post was drafted. A post
+        that waited two days for approval would otherwise carry a time already
+        in the past, and a batch cleared together would all be due at once --
+        exactly the burst the minimum gap exists to prevent.
+        """
         if post.state is not PostState.AWAITING_APPROVAL:
             raise ValueError(f"{post.id} is {post.state.value}, not awaiting approval")
         post.state = PostState.SCHEDULED
+        post.scheduled_for = self.scheduler.next_slot(
+            self.posts, post, at or datetime.now()
+        )
         return post
 
     def campaign_for(
         self, listing: Listing, platforms: tuple[SocialPlatform, ...], start: datetime
     ) -> list[SocialPost]:
-        """Draft one post per platform and space them out."""
+        """Draft one post per platform and space out the ones cleared to go.
+
+        Posts still awaiting the owner are deliberately left unscheduled. They
+        get their slot in :meth:`approve`, timed from the approval rather than
+        from a ``start`` that may be long past by then.
+        """
         drafted = [self.draft(listing, p) for p in platforms]
         for post in drafted:
             self.submit(post)
         self.scheduler.schedule(
-            [p for p in drafted if p.state is not PostState.REJECTED], start
+            [p for p in drafted if p.state is PostState.SCHEDULED], start
         )
         return drafted
 

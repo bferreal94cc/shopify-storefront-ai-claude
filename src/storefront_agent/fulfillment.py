@@ -89,19 +89,47 @@ class FulfillmentEngine:
         for order in candidates:
             if order.state is not OrderState.RISK_CLEARED:
                 continue
+
+            # Stage the whole order before committing any of it. Merging line by
+            # line lets an order that turns out to be undraftable leave earlier
+            # lines behind in a PO that then gets purchased -- the order is held,
+            # but its stock is bought anyway.
+            staged: dict[str, list[POLine]] = {}
+            unmapped: str | None = None
             for line in order.lines:
                 supplier_id = self.supplier_for_sku(line.sku, order.channel)
                 if supplier_id is None:
-                    self.pipeline.transition(
-                        order,
-                        OrderState.HELD,
-                        actor="fulfilment",
-                        reasoning=f"no supplier mapped for {line.sku}",
-                    )
+                    unmapped = line.sku
                     break
-                by_supplier.setdefault(supplier_id, []).append(
-                    (order, POLine(line.sku, line.quantity, line.unit_cost, order.id))
+                staged.setdefault(supplier_id, []).append(
+                    POLine(line.sku, line.quantity, line.unit_cost, order.id)
                 )
+
+            if unmapped is not None:
+                self.pipeline.transition(
+                    order,
+                    OrderState.HELD,
+                    actor="fulfilment",
+                    reasoning=f"no supplier mapped for {unmapped}",
+                )
+                continue
+            if len(staged) > 1:
+                # An order carries a single purchase_order_id, so splitting it
+                # across suppliers would attach the first PO and orphan the rest.
+                # Hold it for a manual split rather than half-represent it.
+                self.pipeline.transition(
+                    order,
+                    OrderState.HELD,
+                    actor="fulfilment",
+                    reasoning=(
+                        f"lines span {len(staged)} suppliers; needs a manual split"
+                    ),
+                )
+                continue
+
+            for supplier_id, lines in staged.items():
+                for line in lines:
+                    by_supplier.setdefault(supplier_id, []).append((order, line))
 
         drafted: list[PurchaseOrder] = []
         for supplier_id, pairs in sorted(by_supplier.items()):

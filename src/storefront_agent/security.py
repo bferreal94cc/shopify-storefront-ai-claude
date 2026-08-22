@@ -62,9 +62,11 @@ def redact_text(value: str) -> str:
 def redact(payload: Any) -> Any:
     """Recursively redact a structure bound for a log or the audit chain.
 
-    Keys whose *name* marks them sensitive are dropped wholesale; free text is
-    pattern-scrubbed. Numbers and booleans pass through -- an order total is not
-    PII and the audit trail is useless without it.
+    Keys whose *name* marks them sensitive keep the key and lose the value to
+    ``REDACTED``; free text is pattern-scrubbed. Numbers and booleans pass
+    through -- an order total is not PII and the audit trail is useless without
+    it. The key survives on purpose: an audit reader needs to see that a token
+    was present without being shown it.
     """
     if isinstance(payload, dict):
         clean: dict[str, Any] = {}
