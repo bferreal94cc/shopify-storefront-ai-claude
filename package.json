@@ -17,7 +17,9 @@
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "typecheck": "react-router typegen && tsc --noEmit"
+    "typecheck": "react-router typegen && tsc --noEmit",
+    "import:dr-tech-pr": "node scripts/import-dr-tech-pr-products.mjs",
+    "import:dr-tech-pr:dry-run": "node scripts/import-dr-tech-pr-products.mjs --dry-run"
   },
   "type": "module",
   "engines": {
@@ -42,7 +44,7 @@
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "@shopify/api-codegen-preset": "^1.1.1",
+    "@shopify/api-codegen-preset": "^1.1.0",
     "@shopify/polaris-types": "^1.0.0",
     "@types/eslint": "^9.6.1",
     "@types/node": "^22.2.0",
