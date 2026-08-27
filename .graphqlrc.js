@@ -1,30 +1,38 @@
-import {getSchema} from '@shopify/hydrogen-codegen';
-
-/**
- * GraphQL Config
- * @see https://the-guild.dev/graphql/config/docs/user/usage
- * @type {IGraphQLConfig}
- */
-const graphqlConfig = {
-  projects: {
-    default: {
-      schema: getSchema('storefront'),
-      documents: [
-        './*.{ts,tsx,js,jsx}',
-        './app/**/*.{ts,tsx,js,jsx}',
-        '!./app/graphql/**/*.{ts,tsx,js,jsx}',
-      ],
+import fs from "fs";
+import { ApiVersion } from "@shopify/shopify-app-react-router/server";
+import { shopifyApiProject, ApiType } from "@shopify/api-codegen-preset";
+function getConfig() {
+  const config = {
+    projects: {
+      default: shopifyApiProject({
+        apiType: ApiType.Admin,
+        apiVersion: ApiVersion.October25,
+        documents: [
+          "./app/**/*.{js,ts,jsx,tsx}",
+          "./app/.server/**/*.{js,ts,jsx,tsx}",
+        ],
+        outputDir: "./app/types",
+      }),
     },
-
-    customer: {
-      schema: getSchema('customer-account'),
-      documents: ['./app/graphql/customer-account/*.{ts,tsx,js,jsx}'],
-    },
-
-    // Add your own GraphQL projects here for CMS, Shopify Admin API, etc.
-  },
-};
-
-export default graphqlConfig;
-
-/** @typedef {import('graphql-config').IGraphQLConfig} IGraphQLConfig */
+  };
+  let extensions = [];
+  try {
+    extensions = fs.readdirSync("./extensions");
+  } catch {
+    // ignore if no extensions
+  }
+  for (const entry of extensions) {
+    const extensionPath = `./extensions/${entry}`;
+    const schema = `${extensionPath}/schema.graphql`;
+    if (!fs.existsSync(schema)) {
+      continue;
+    }
+    config.projects[entry] = {
+      schema,
+      documents: [`${extensionPath}/**/*.graphql`],
+    };
+  }
+  return config;
+}
+const config = getConfig();
+export default config;

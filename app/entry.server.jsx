@@ -1,59 +1,51 @@
-import {ServerRouter} from 'react-router';
-import {isbot} from 'isbot';
-import {renderToReadableStream} from 'react-dom/server';
-import {createContentSecurityPolicy} from '@shopify/hydrogen';
+import { PassThrough } from "stream";
+import { renderToPipeableStream } from "react-dom/server";
+import { ServerRouter } from "react-router";
+import { createReadableStreamFromReadable } from "@react-router/node";
+import { isbot } from "isbot";
+import { addDocumentResponseHeaders } from "./shopify.server";
 
-/**
- * @param {Request} request
- * @param {number} responseStatusCode
- * @param {Headers} responseHeaders
- * @param {EntryContext} reactRouterContext
- * @param {HydrogenRouterContextProvider} context
- */
+export const streamTimeout = 5000;
+
 export default async function handleRequest(
   request,
   responseStatusCode,
   responseHeaders,
   reactRouterContext,
-  context,
 ) {
-  const {nonce, header, NonceProvider} = createContentSecurityPolicy({
-    shop: {
-      checkoutDomain: context.env.PUBLIC_CHECKOUT_DOMAIN,
-      storeDomain: context.env.PUBLIC_STORE_DOMAIN,
-    },
-  });
+  addDocumentResponseHeaders(request, responseHeaders);
+  const userAgent = request.headers.get("user-agent");
+  const callbackName = isbot(userAgent ?? "") ? "onAllReady" : "onShellReady";
 
-  const body = await renderToReadableStream(
-    <NonceProvider>
-      <ServerRouter
-        context={reactRouterContext}
-        url={request.url}
-        nonce={nonce}
-      />
-    </NonceProvider>,
-    {
-      nonce,
-      signal: request.signal,
-      onError(error) {
-        console.error(error);
-        responseStatusCode = 500;
+  return new Promise((resolve, reject) => {
+    const { pipe, abort } = renderToPipeableStream(
+      <ServerRouter context={reactRouterContext} url={request.url} />,
+      {
+        [callbackName]: () => {
+          const body = new PassThrough();
+          const stream = createReadableStreamFromReadable(body);
+
+          responseHeaders.set("Content-Type", "text/html");
+          resolve(
+            new Response(stream, {
+              headers: responseHeaders,
+              status: responseStatusCode,
+            }),
+          );
+          pipe(body);
+        },
+        onShellError(error) {
+          reject(error);
+        },
+        onError(error) {
+          responseStatusCode = 500;
+          console.error(error);
+        },
       },
-    },
-  );
+    );
 
-  if (isbot(request.headers.get('user-agent'))) {
-    await body.allReady;
-  }
-
-  responseHeaders.set('Content-Type', 'text/html');
-  responseHeaders.set('Content-Security-Policy', header);
-
-  return new Response(body, {
-    headers: responseHeaders,
-    status: responseStatusCode,
+    // Automatically timeout the React renderer after 6 seconds, which ensures
+    // React has enough time to flush down the rejected boundary contents
+    setTimeout(abort, streamTimeout + 1000);
   });
 }
-
-/** @typedef {import('@shopify/hydrogen').HydrogenRouterContextProvider} HydrogenRouterContextProvider */
-/** @typedef {import('react-router').EntryContext} EntryContext */
