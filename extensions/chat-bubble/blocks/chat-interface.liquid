@@ -1,26 +1,26 @@
 {{ 'chat.css' | asset_url | stylesheet_tag }}
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <div class="shop-ai-chat-container">
-  <div class="shop-ai-chat-bubble" style="background-color: {{ block.settings.chat_bubble_color }}">
+  <button type="button" class="shop-ai-chat-bubble" aria-label="{{ 'chat.title' | t }}" style="background-color: {{ block.settings.chat_bubble_color }}">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
-  </div>
+  </button>
 
   <div class="shop-ai-chat-window">
     <div class="shop-ai-chat-header">
       <div>{{ 'chat.title' | t }}</div>
-      <button class="shop-ai-chat-close">✕</button>
+      <button type="button" class="shop-ai-chat-close" aria-label="{{ 'chat.closeButton' | t }}">✕</button>
     </div>
 
-    <div class="shop-ai-chat-messages">
+    <div class="shop-ai-chat-messages" role="log" aria-live="polite">
       <!-- Messages will be added here by JavaScript -->
     </div>
 
     <div class="shop-ai-chat-input">
-      <input type="text" placeholder="{{ 'chat.inputPlaceholder' | t }}">
-      <button class="shop-ai-chat-send">
+      <input type="text" aria-label="{{ 'chat.inputPlaceholder' | t }}" placeholder="{{ 'chat.inputPlaceholder' | t }}">
+      <button type="button" class="shop-ai-chat-send" aria-label="{{ 'chat.sendButton' | t }}">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"></line>
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -34,7 +34,8 @@
 <script>
   window.shopChatConfig = {
     promptType: {{ block.settings.system_prompt | json }},
-    welcomeMessage: {{ block.settings.welcome_message | json }}
+    welcomeMessage: {{ block.settings.welcome_message | json }},
+    apiBaseUrl: {{ block.settings.api_base_url | json }}
   };
   window.shopId = {{ shop.id }};
 </script>
@@ -71,6 +72,12 @@
         }
       ],
       "default": "standardAssistant"
+    },
+    {
+      "type": "text",
+      "id": "api_base_url",
+      "label": "Chat API Base URL",
+      "info": "The deployed app's URL (e.g. https://your-app.example.com), so shoppers' browsers reach your real backend instead of localhost. Leave blank for local development."
     }
   ]
 }

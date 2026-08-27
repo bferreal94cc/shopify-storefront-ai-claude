@@ -357,6 +357,44 @@
      */
     Formatting: {
       /**
+       * Escape text for safe use as HTML element content.
+       * @param {string} text - Raw text
+       * @returns {string} HTML-escaped text
+       */
+      escapeHtml: function(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      },
+
+      /**
+       * Escape characters that would break out of an HTML attribute value.
+       * escapeHtml already handles `&`/`<`/`>` for the surrounding text, so
+       * this only needs to close the quote-breakout gap it leaves open.
+       * @param {string} value - Attribute value (already HTML-escaped text)
+       * @returns {string} Attribute-safe value
+       */
+      escapeAttributeQuotes: function(value) {
+        return String(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      },
+
+      /**
+       * Whether a URL is safe to use as a link target - i.e. it resolves to
+       * http(s), not javascript:/data: or another scheme that would execute
+       * in the visitor's browser.
+       * @param {string} url - Candidate URL
+       * @returns {boolean}
+       */
+      isSafeUrl: function(url) {
+        try {
+          const parsed = new URL(url, window.location.href);
+          return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch (e) {
+          return false;
+        }
+      },
+
+      /**
        * Format message content with markdown and links
        * @param {HTMLElement} element - The element to format
        */
@@ -365,8 +403,10 @@
 
         const rawText = element.dataset.rawText;
 
-        // Process the text with various Markdown features
-        let processedText = rawText;
+        // Escape the raw text first so any HTML in the model/tool output
+        // can't reach innerHTML; only the tags this function deliberately
+        // builds below end up as real markup.
+        let processedText = this.escapeHtml(rawText);
 
         // Process Markdown links
         const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -379,12 +419,19 @@
             // Just return normal link that will be handled by the document click handler
             return '<a href="#auth" class="shop-auth-trigger">' + text + '</a>';
           }
+
+          if (!ShopAIChat.Formatting.isSafeUrl(url)) {
+            // Not a scheme we're willing to link to - render as plain text.
+            return text;
+          }
+          const safeUrl = ShopAIChat.Formatting.escapeAttributeQuotes(url);
+
           // If it's a checkout link, replace the text
-          else if (url.includes('/cart') || url.includes('checkout')) {
-            return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">click here to proceed to checkout</a>';
+          if (url.includes('/cart') || url.includes('checkout')) {
+            return '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">click here to proceed to checkout</a>';
           } else {
             // For normal links, preserve the original text
-            return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+            return '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
           }
         });
 
@@ -411,7 +458,7 @@
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
           const unorderedMatch = line.match(/^\s*([-*])\s+(.*)/);
-          const orderedMatch = line.match(/^\s*(\d+)[\.)]\s+(.*)/);
+          const orderedMatch = line.match(/^\s*(\d+)[.)]\s+(.*)/);
 
           if (unorderedMatch) {
             if (currentList !== 'ul') {
@@ -465,6 +512,17 @@
      */
     API: {
       /**
+       * Base URL for the app backend. Configurable via the block's "Chat
+       * API Base URL" setting so a deployed storefront can reach the real
+       * app instead of the shopper's own machine; falls back to the local
+       * dev server default when unset.
+       * @returns {string}
+       */
+      getBaseUrl: function() {
+        return window.shopChatConfig?.apiBaseUrl || 'https://localhost:3458';
+      },
+
+      /**
        * Stream a response from the API
        * @param {string} userMessage - User's message text
        * @param {string} conversationId - Conversation ID for context
@@ -481,7 +539,7 @@
             prompt_type: promptType
           });
 
-          const streamUrl = 'https://localhost:3458/chat';
+          const streamUrl = this.getBaseUrl() + '/chat';
           const shopId = window.shopId;
 
           const response = await fetch(streamUrl, {
@@ -493,6 +551,13 @@
             },
             body: requestBody
           });
+
+          if (!response.ok || !response.body) {
+            ShopAIChat.UI.removeTypingIndicator();
+            ShopAIChat.Message.add("Sorry, I couldn't process your request. Please try again later.",
+              'assistant', messagesContainer);
+            return;
+          }
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
@@ -507,6 +572,7 @@
           currentMessageElement = messageElement;
 
           // Process the stream
+          // eslint-disable-next-line no-constant-condition -- intentional read-until-done loop
           while (true) {
             const { value, done } = await reader.read();
             if (done) break;
@@ -595,7 +661,7 @@
             }
             break;
 
-          case 'new_message':
+          case 'new_message': {
             ShopAIChat.Formatting.formatMessageContent(currentMessageElement);
             ShopAIChat.UI.showTypingIndicator();
 
@@ -609,6 +675,7 @@
             // Update the current element reference
             updateCurrentElement(newMessageElement);
             break;
+          }
 
           case 'content_block_complete':
             ShopAIChat.UI.showTypingIndicator();
@@ -630,7 +697,7 @@
           messagesContainer.appendChild(loadingMessage);
 
           // Fetch history from the server
-          const historyUrl = `https://localhost:3458/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
+          const historyUrl = `${this.getBaseUrl()}/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
           console.log('Fetching history from:', historyUrl);
 
           const response = await fetch(historyUrl, {
@@ -779,7 +846,7 @@
           attemptCount++;
 
           try {
-            const tokenUrl = 'https://localhost:3458/auth/token-status?conversation_id=' +
+            const tokenUrl = ShopAIChat.API.getBaseUrl() + '/auth/token-status?conversation_id=' +
               encodeURIComponent(conversationId);
             const response = await fetch(tokenUrl);
 
