@@ -17,7 +17,7 @@ class MCPClient {
     this.tools = [];
     this.customerTools = [];
     this.storefrontTools = [];
-    // TODO: Make this dynamic, for that first we need to allow access of mcp tools on password proteted demo stores.
+    // TODO: Make this dynamic, for that first we need to allow access of mcp tools on password protected demo stores.
     this.storefrontMcpEndpoint = `${hostUrl}/api/mcp`;
 
     const accountHostUrl = hostUrl.replace(/(\.myshopify\.com)$/, '.account$1');
@@ -52,7 +52,7 @@ class MCPClient {
       // and tools that require auth will prompt for it later
       const headers = {
         "Content-Type": "application/json",
-        "Authorization": this.customerAccessToken || ""
+        "Authorization": this.customerAccessToken ? `Bearer ${this.customerAccessToken}` : ""
       };
 
       const response = await this._makeJsonRpcRequest(
@@ -190,7 +190,7 @@ class MCPClient {
 
       const headers = {
         "Content-Type": "application/json",
-        "Authorization": accessToken
+        "Authorization": accessToken ? `Bearer ${accessToken}` : ""
       };
 
       try {

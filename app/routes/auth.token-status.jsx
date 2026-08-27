@@ -1,4 +1,5 @@
 import { getCustomerToken } from "../db.server";
+import { verifyConversationToken } from "../auth.server";
 
 /**
  * API endpoint for checking if a customer token is available for a given conversation ID
@@ -7,14 +8,23 @@ import { getCustomerToken } from "../db.server";
 export async function loader({ request }) {
   // Get conversation ID from query parameter
   const url = new URL(request.url);
-  const conversationId = url.searchParams.get("conversation_id");
+  const conversationToken = url.searchParams.get("conversation_id");
 
-  if (!conversationId) {
+  if (!conversationToken) {
     return new Response(JSON.stringify({
       status: "error",
       message: "Missing conversation_id parameter"
     }), {
       status: 400,
+      headers: corsHeaders(request)
+    });
+  }
+
+  // Reject unsigned/tampered conversation IDs before doing any lookup, so a
+  // guessed or borrowed ID can't be used to probe another shopper's auth state.
+  const conversationId = await verifyConversationToken(conversationToken);
+  if (!conversationId) {
+    return new Response(JSON.stringify({ status: "unauthorized" }), {
       headers: corsHeaders(request)
     });
   }

@@ -72,10 +72,11 @@ export async function getCodeVerifier(state) {
  * Store a customer access token in the database
  * @param {string} conversationId - The conversation ID to associate with the token
  * @param {string} accessToken - The access token to store
+ * @param {string|undefined} refreshToken - The refresh token to store, if the provider returned one
  * @param {Date} expiresAt - When the token expires
  * @returns {Promise<Object>} - The saved customer token
  */
-export async function storeCustomerToken(conversationId, accessToken, expiresAt) {
+export async function storeCustomerToken(conversationId, accessToken, refreshToken, expiresAt) {
   try {
     // Check if a token already exists for this conversation
     const existingToken = await prisma.customerToken.findFirst({
@@ -88,6 +89,7 @@ export async function storeCustomerToken(conversationId, accessToken, expiresAt)
         where: { id: existingToken.id },
         data: {
           accessToken,
+          refreshToken,
           expiresAt,
           updatedAt: new Date()
         }
@@ -100,6 +102,7 @@ export async function storeCustomerToken(conversationId, accessToken, expiresAt)
         id: `ct_${Date.now()}`,
         conversationId,
         accessToken,
+        refreshToken,
         expiresAt,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -141,23 +144,10 @@ export async function getCustomerToken(conversationId) {
  */
 export async function createOrUpdateConversation(conversationId) {
   try {
-    const existingConversation = await prisma.conversation.findUnique({
-      where: { id: conversationId }
-    });
-
-    if (existingConversation) {
-      return await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          updatedAt: new Date()
-        }
-      });
-    }
-
-    return await prisma.conversation.create({
-      data: {
-        id: conversationId
-      }
+    return await prisma.conversation.upsert({
+      where: { id: conversationId },
+      create: { id: conversationId },
+      update: { updatedAt: new Date() }
     });
   } catch (error) {
     console.error('Error creating/updating conversation:', error);

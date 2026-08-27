@@ -1,4 +1,5 @@
 import { getCodeVerifier, storeCustomerToken, getCustomerAccountUrls } from "../db.server";
+import { decodeState } from "../auth.server";
 
 /**
  * Handle OAuth callback from Shopify Customer API
@@ -7,33 +8,40 @@ export async function loader({ request }) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const [conversationId, shopId] = state.split("-");
 
   if (!code) {
     return new Response(JSON.stringify({ error: "Authorization code is missing" }), { status: 400 });
   }
 
+  const statePayload = decodeState(state);
+  if (!statePayload) {
+    return new Response(JSON.stringify({ error: "Invalid or missing state parameter" }), { status: 400 });
+  }
+  const { conversationId, shopId } = statePayload;
+
   try {
     // Exchange code for access token
     const tokenResponse = await exchangeCodeForToken(code, state);
 
-    // Store token in database
-    try {
-      // Calculate expiration date based on expires_in (seconds)
-      const expiresAt = new Date();
-      expiresAt.setSeconds(expiresAt.getSeconds() + tokenResponse.expires_in);
+    // Calculate expiration date based on expires_in (seconds)
+    const expiresAt = new Date();
+    expiresAt.setSeconds(expiresAt.getSeconds() + tokenResponse.expires_in);
 
-      // Store in database with conversation ID
+    // Store in database with conversation ID. If this fails, the client
+    // will poll /auth/token-status forever and never see a token, so fail
+    // the callback instead of silently reporting success.
+    try {
       await storeCustomerToken(
         conversationId,
         tokenResponse.access_token,
+        tokenResponse.refresh_token,
         expiresAt
       );
 
       console.log('Stored customer token in database for conversation:', conversationId);
     } catch (error) {
       console.error('Failed to store token in database:', error);
-      // Continue anyway to not disrupt user flow
+      return new Response(JSON.stringify({ error: "Failed to store access token" }), { status: 500 });
     }
 
     // Instead of redirecting, return HTML that auto-closes the tab
@@ -91,7 +99,9 @@ export async function loader({ request }) {
  */
 async function exchangeCodeForToken(code, state) {
   const clientId = process.env.SHOPIFY_API_KEY;
-  const [conversationId, shopId] = state.split("-");
+  const statePayload = decodeState(state);
+  const conversationId = statePayload?.conversationId;
+  const shopId = statePayload?.shopId;
   if (!clientId || !shopId) {
     throw new Error("SHOPIFY_CLIENT_ID and SHOPIFY_SHOP_ID environment variables are required");
   }
@@ -105,32 +115,23 @@ async function exchangeCodeForToken(code, state) {
     throw new Error("Token URL not found");
   }
 
-  // Get the code verifier that corresponds to this authorization request from database
-  let codeVerifier = "";
-  try {
-    const verifierRecord = await getCodeVerifier(state);
-    if (verifierRecord) {
-      codeVerifier = verifierRecord.verifier;
-    } else {
-      console.warn("Code verifier not found for state:", state);
-      // Proceed anyway, since we might be using an older flow without PKCE
-    }
-  } catch (error) {
-    console.error("Error retrieving code verifier:", error);
-    // Proceed anyway and attempt the token exchange
+  // Get the code verifier that corresponds to this authorization request from
+  // database. This app only supports the PKCE flow, so a missing/expired
+  // verifier means the state is invalid (or this state was already
+  // consumed) - proceeding without it would defeat the PKCE check entirely.
+  const verifierRecord = await getCodeVerifier(state);
+  if (!verifierRecord) {
+    throw new Error("Code verifier not found or expired for this authorization attempt");
   }
+  const codeVerifier = verifierRecord.verifier;
 
   const requestBody = {
     grant_type: "authorization_code",
     client_id: clientId,
     code: code,
-    redirect_uri: redirectUri
+    redirect_uri: redirectUri,
+    code_verifier: codeVerifier
   };
-
-  // Add code_verifier if we have it
-  if (codeVerifier) {
-    requestBody.code_verifier = codeVerifier;
-  }
 
   // Format the request as x-www-form-urlencoded instead of JSON
   const formData = new URLSearchParams();
