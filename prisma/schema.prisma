@@ -8,6 +8,11 @@ generator client {
 // Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
 // enough when changing adapters.
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+// SQLite is a single-file, single-instance datasource: sessions, customer
+// tokens, and chat history live on one container's disk. Fine for local dev;
+// for a real deployment (a persistent volume, or multiple/replaced
+// containers) switch provider to postgresql/mysql and point url at a real
+// connection string, or mount a durable volume at this file's path.
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"

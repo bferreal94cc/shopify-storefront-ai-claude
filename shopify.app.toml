@@ -18,12 +18,12 @@ api_version = "2025-04"
 scopes = "unauthenticated_read_product_listings"
 
 [auth]
-redirect_urls = [ "https://shop-chat-agent.com/api/auth" ]
+redirect_urls = [ "https://shop-chat-agent.com/auth/callback" ]
 
 [pos]
 embedded = false
 
 [customer_authentication]
 redirect_uris = [
-  "https://shop-chat-agent.com/callback"
+  "https://shop-chat-agent.com/auth/callback"
 ]
