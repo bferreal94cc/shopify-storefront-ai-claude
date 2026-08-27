@@ -1,5 +1,12 @@
 {
-  "include": ["env.d.ts", "**/*.ts", "**/*.tsx", ".react-router/types/**/*"],
+  "include": ["**/*.ts", "**/*.tsx", ".react-router/types/**/*"],
+  "exclude": [
+    "node_modules",
+    "build",
+    "env.d.ts",
+    "customer-accountapi.generated.d.ts",
+    "storefrontapi.generated.d.ts"
+  ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "strict": true,
