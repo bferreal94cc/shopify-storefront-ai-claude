@@ -3,3 +3,14 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .runs/
+
+node_modules
+/.DS_Store
+/.cache
+/build
+/dist
+/public/build
+/.mf
+.env
+.shopify
+.react-router
