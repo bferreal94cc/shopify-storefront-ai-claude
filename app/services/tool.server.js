@@ -45,7 +45,7 @@ export function createToolService() {
       productsToDisplay.push(...processProductSearchResult(toolUseResponse));
     }
 
-    addToolResultToHistory(conversationHistory, toolUseId, toolUseResponse.content, conversationId);
+    await addToolResultToHistory(conversationHistory, toolUseId, toolUseResponse.content, conversationId);
   };
 
   /**

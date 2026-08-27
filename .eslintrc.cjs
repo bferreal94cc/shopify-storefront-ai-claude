@@ -131,6 +131,10 @@ module.exports = {
         ".graphqlrc.{js,ts}",
         "shopify.server.{js,ts}",
         "**/*.server.{js,ts}",
+        // Route modules' loaders/actions always run server-side, and
+        // reference process.env directly rather than through a *.server.js
+        // helper.
+        "app/routes/**/*.jsx",
       ],
       env: {
         node: true,
