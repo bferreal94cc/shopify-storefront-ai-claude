@@ -1,11 +1,14 @@
 node_modules
 
+/.DS_Store
 /.cache
 /build
+/dist
 /app/build
 /public/build/
 /public/_dev
 /app/public/build
+/.mf
 /prisma/dev.sqlite
 /prisma/dev.sqlite-journal
 database.sqlite
